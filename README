@@ -1,0 +1,180 @@
+**********************************************************************************************************************
+ASSIGNMENT TITLE
+------------------------------------------
+Name: Abraham Mgowano
+Course Name: CS 144 - Computer Networking
+Assignment: Lab 1 - Reliable, Stop and Wait
+Instructor: Phillip Levis and Nick McKeown
+Due date: 3rd October 8:59p.m
+------------------------------------------
+
+
+PROBLEM DESCRIPTION
+----------------------------------------------------------
+The assignment expects an implementation of a reliable stop
+and wait with a sliding window of size 1. The implementation
+focuses on the transport layer of the 4-layer internet model.
+
+In this assignment a single direction connection between
+two UDP ports with the following implementations:
+1. Handling packet drops
+2. Handling packet corruption
+3. Providing a trivial flow control
+4. Provide a stream abstraction
+5. Allowing multiple packets to be outstanding based
+   on the value of window size given in this case is 1.
+6. Handle packet reordering
+7. Detect any single-bit errors in packets
+8. Handle connection tear down.
+
+The client sends a stream of data via STDIN, break it into
+fixed-size packets suitable for UDP transport, have a control
+header and a data packet appended together and then writes
+this packet to the server. The server reads the packets and
+write the corresponding data, in order to a reliable stream
+in this case STDOUT.
+-------------------------------------------------------------
+
+
+
+THE IMPLEMENTATION
+------------------------------------------------------------------
+The solution to the problem follows the implementation of the
+following two state machines, one of the sender and another of the
+receiver.
+
+
+
+THE SENDER STATE MACHINE
+=============================================================================================================================
+
+									
+										
+								  
+                     +------------+                             +------------+                   +----------+            
+    rel_read()       |WAITING FOR |       read an EOF           |WAIT FOR ACK|   receive ACK     |   REL    |                                       
+ ----------------->  |INPUT DATA  | --------------------------> |READ AN EOF |------------------>| DESTROY  |                                        
+                     +------------+        send data            +------------+   can terminate   +----------+
+                       |      ^                                        |                             //\ 
+                       |      |                                        |                              |        
+                       |      |                                        |                              |            
+          read data    |      |  receive ACK                           | receive ACK                  |                                     
+         ----------->  |      | ------------->                         | -------------->              |            
+          send data    |      |   rel_read()                           | cannot terminate             |                          
+                       |      |                                        |                              |
+                       |      |                                        |                              |         
+                       |      |                                        |                              |              
+                      \\/     |                                       \\/                             |            
+                     +------------+                               +-----------+    EOF from sender    |               
+                     |WAITING FOR |                               | READ AN   | ----------------------|      
+                     |  AN ACK    |                               |   EOF     | and output everything                         
+                     +------------+                               +-----------+
+
+
+
+Description:
+The state diagram above reflects the basic structure of the state diagram
+on the receiver's side. Some of the information is not displayed on the
+diagram because of the drawing limitations. For example when rel_read is
+called while in the following states WAITING FOR AN ACK, WAIT FOR ACK AND
+READ AN EOF, and READ AN EOF no transitions happens.
+
+Also the state machine doesn't show how retransmission take place but the 
+program would re-transmit data after waiting for a period of time, timeout
+given by the config_common struct.
+
+When we are in the state WAIT FOR ACK READ AND EOF, where we are waiting
+for an ack and we have read an EOF, there's a reference to actions "can
+terminate" and "cannot terminate" these actions map to method
+checkTermination() in the code which checks for the necesarry four
+conditions to call rel_destroy.
+==============================================================================================================================
+
+
+
+
+THE RECEIVER STATE MACHINE
+=============================================================================================================================
+							
+					   		rel_recvpkt              rel_read
+							    |                       ^                    
+							    |                       |                   
+							    |                       |
+							   \\/                      |
++------------+   buff empty   +----------+  read EOF    +--------+   read ACK   +-----------+              +----------+
+|CONN_OUTPUT |<-------------- | EOF FROM |<-------------|WAITING |------------->|NOT WAITING|------------->|REL-------|
+|   EOF      |   print EOF    | SENDER   |  send ack    |FOR DATA|      __	|FOR ACK    |-can-terminate|DESTROY---|
++------------+                +----------+              +--------+		+-----------+              +----------+
+      |                            |                        | 
+      |                            |                        |  
+      | can                        | rel                    |read DATA
+      | terminate                  | output                 |------------
+      |                            |                        |send ack
+      |                            |                        |    
+      |                            |                        |
+     \\/                         \\/                       \\/
++------------+                +-----------+            +-----------+---space-----+--------------+
+|   REL      |<-------------- |CONN OUTPUT|            | PROCESS   |------------>| CONN OUTPUT--|
+| DESTROY    |   can          |   EOF     |            |   DATA	   |--available--|              |
++------------+  terminate     +-----------+            +-----------+-------------+--------------+
+                                                             |                         //\
+					                     |                          |
+                                                             |                          |
+					                     |                          |
+                                                             |                          |
+							    \\/                         |
+						      +---- --------+                   |
+					              |   BUFFER    | rel output        |   
+						      |    DATA     |-------------------|
+						      +-------------+ space available
+
+
+Description:
+Again there are some transitions that are not represented for
+example,after CONN_OUTPUT is called on data there is a transition
+back to the WAITING FOR DATA state with an action of sending an
+acknowledgement.
+
+Also in WAITING FOR DATA if we receive packets that are either malformed
+or out of sequence we just remain at the same state. If we receive a
+duplicated packet we send an acknowledgement and continue waiting for
+data.
+Also in when we are in state of BUFFER DATA we do not accept input data
+and just remain in that state and transition back to WAITING FOR DATA
+state through CONN_OUTPUT.
+
+The function can terminate refers to a function in the program called
+checkTermination()
+========================================================================================================================================			 
+
+
+SOME DESIGN DECISIONS
+----------------------
+The program is robust enough and there are attempts to make it work
+even for cases when the sliding window will increase and for this reason
+we have an array for storing packets in flight and also an array for
+storing packets to the output buffer even though we know there can only
+be one packet in flight in this program and so the arrays are there in case
+of multiple packets.								
+															         
+																  
+RECOMMENDED FEATURES BUT NOT INCLUDED
+--------------------------------------
+For simplicity's sake I didn't implement the FINWAIT or the retransmission
+both ideas were recommended but not required and so as long as there were
+guarantees that the code will work well without them, there was no need
+spending extra time on them.
+*********************************************************************************************************************************************														   
+																    
+																     
+																       
+																        
+																	
+																	
+																	
+																	
+
+
+
+
+
